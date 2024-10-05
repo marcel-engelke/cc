@@ -13,23 +13,25 @@ local TEMPERATURE_MAX = 1000
 
 --- Config end ---
 
-local strReactorStatus = "Status:    "
+local strReactorStatus = "Status:  "
 local lenReactorStatus = string.len(strReactorStatus)
-local strTemperature   = "Temp (K):  "
+local strTemperature   = "Temp.:   "
 local lenTemperature   = string.len(strTemperature)
-local strDamage        = "Damage:    "
+local strDamage        = "Dmg.:    "
 local lenDamage        = string.len(strDamage)
-local strFuel          = "Fuel:      "
+local strFuel          = "Fuel:    "
 local lenFuel          = string.len(strFuel)
-local strCoolant       = "Coolant:   "
+local strCoolant       = "Cool.:   "
 local lenCoolant       = string.len(strCoolant)
-local strWaste         = "Waste:     "
+local strWaste         = "Waste:   "
 local lenWaste         = string.len(strWaste)
-local strEnergy        = "Energy:    "
+local strEnergy        = "Energy:  "
 local lenEnergy        = string.len(strEnergy)
+local strTransfer      = "I/O (t): "
+local lenTransfer      = string.len(strTransfer)
 
 -- Used to construct the static status keys
-strs = { strReactorStatus, strTemperature, strDamage, strFuel, strCoolant, strWaste, strEnergy }
+strs = { strReactorStatus, strTemperature, strDamage, strFuel, strCoolant, strWaste, strEnergy, strTransfer }
 
 userEnabled = false
 energySatisfied = false
@@ -70,8 +72,9 @@ local function printInfo()
 	else
 		local len, _ = monitor.getSize()
 		monitor.setCursorPos((len / 2 - string.len(info) / 2) + 1, 1)
-		local c = string.len(info) > 1 and "e" or "0"
-		monitor.blit(info, string.rep(c, string.len(info)), string.rep("f", string.len(info)))
+		local l = string.len(info)
+		local c = l > 1 and "e" or "0"
+		monitor.blit(info, string.rep(c, l), string.rep("f", l))
 		clearEOL()
 	end
 end
@@ -89,28 +92,31 @@ end
 
 local function printTemperature()
 	monitor.setCursorPos(lenTemperature + 1, 3)
-	local t = reactor.getTemperature()
-	local tStr = string.format("%.1f/%d", t, TEMPERATURE_MAX)
-	local c = t >= TEMPERATURE_MAX and "e" or "0"
-	monitor.blit(tStr, string.rep(c, string.len(tStr)), string.rep("f", string.len(tStr)))
+	local val = reactor.getTemperature()
+	local valStr = string.format("%.1fK/1200K", val)
+	local l = string.len(valStr)
+	local c = val >= TEMPERATURE_MAX and "e" or "0"
+	monitor.blit(valStr, string.rep(c, l), string.rep("f", l))
 	clearEOL()
 end
 
 local function printDamage()
 	monitor.setCursorPos(lenDamage + 1, 4)
-	local d = reactor.getDamagePercent()
-	local c = d >= DAMAGE_MAX and "e" or "0"
-	dStr = string.format("%d%%", d)
-	monitor.blit(dStr, string.rep(c, string.len(dStr)), string.rep("f", string.len(dStr)))
+	local val = reactor.getDamagePercent()
+	local valStr = string.format("%d%%", val)
+	local l = string.len(valStr)
+	local c = val >= DAMAGE_MAX and "e" or "0"
+	monitor.blit(valStr, string.rep(c, l), string.rep("f", l))
 	clearEOL()
 end
 
 local function printFuel()
 	monitor.setCursorPos(lenFuel + 1, 5)
-	local f = (reactor.getFuel().amount / reactor.getFuelCapacity()) * 100
-	local c = f < 20 and "e" or "0"
-	fStr = string.format("%.1f%%", f)
-	monitor.blit(fStr, string.rep(c, string.len(fStr)), string.rep("f", string.len(fStr)))
+	local val = (reactor.getFuel().amount / reactor.getFuelCapacity()) * 100
+	local valStr = string.format("%.1f%%", val)
+	local l = string.len(valStr)
+	local c = val < 20 and "e" or "0"
+	monitor.blit(valStr, string.rep(c, l), string.rep("f", l))
 	clearEOL()
 end
 
@@ -120,19 +126,21 @@ end
 
 local function printCoolant()
 	monitor.setCursorPos(lenCoolant + 1, 6)
-	local co = getCoolantPercent()
-	local c = co < 20 and "e" or "0"
-	coStr = string.format("%.1f%%", co)
-	monitor.blit(coStr, string.rep(c, string.len(coStr)), string.rep("f", string.len(coStr)))
+	local val = getCoolantPercent()
+	local valStr = string.format("%.1f%%", val)
+	local l = string.len(valStr)
+	local c = val < 20 and "e" or "0"
+	monitor.blit(valStr, string.rep(c, l), string.rep("f", l))
 	clearEOL()
 end
 
 local function printWaste()
 	monitor.setCursorPos(lenWaste + 1, 7)
-	local w = (reactor.getWaste().amount / reactor.getWasteCapacity()) * 100
-	local c = w > 80 and "e" or "0"
-	wStr = string.format("%.1f%%", w)
-	monitor.blit(wStr, string.rep(c, string.len(wStr)), string.rep("f", string.len(wStr)))
+	local val = (reactor.getWaste().amount / reactor.getWasteCapacity()) * 100
+	local valStr = string.format("%.1f%%", val)
+	local l = string.len(valStr)
+	local c = val > 80 and "e" or "0"
+	monitor.blit(valStr, string.rep(c, l), string.rep("f", l))
 	clearEOL()
 end
 
@@ -140,12 +148,43 @@ local function getEnergyPercent()
 	return (storage.getEnergy() / storage.getMaxEnergy()) * 100
 end
 
+local function formatEnergy(val)
+	val = val / 2.5
+	fmt = (val < 1000000 and {val / 1000, "K"})
+		or (val < 1000000000 and {val / 1000000, "M"})
+		or (val < 1000000000000 and {val / 1000000000, "G"})
+		or (val < 1000000000000000 and {val / 1000000000, "T"})
+	return string.format("%.1f" .. fmt[2], fmt[1])
+end
+
 local function printEnergy()
 	monitor.setCursorPos(lenEnergy + 1, 8)
-	local w = getEnergyPercent()
-	local c = w > ENERGY_MAX and "e" or "0"
-	wStr = string.format("%.1f%% (%d%%)", w, energyNote)
-	monitor.blit(wStr, string.rep(c, string.len(wStr)), string.rep("f", string.len(wStr)))
+	local valPct = getEnergyPercent()
+	local valStr = formatEnergy(storage.getEnergy()) .. "/" ..
+		formatEnergy(storage.getMaxEnergy()) .. " ("
+	local l = string.len(valStr)
+	monitor.blit(valStr, string.rep("0", l), string.rep("f", l))
+	valStr = string.format("%d%%", valPct)
+	l = string.len(valStr)
+	local c = (valPct < 20  and "e") or (valPct < 80 and "4") or "5"
+	monitor.blit(valStr, string.rep(c, l), string.rep("f", l))
+	monitor.write(")")
+	clearEOL()
+end
+
+local function printTransfer()
+	monitor.setCursorPos(lenTransfer + 1, 9)
+	local valI = storage.getLastInput()
+	local valO = storage.getLastOutput()
+	local c = valI > 0 and "5" or "0"
+	valI = formatEnergy(valI)
+	local l = string.len(valI)
+	monitor.blit(valI, string.rep(c, l), string.rep("f", l))
+	monitor.write("/")
+	c = valO > 0 and "e" or "0"
+	valO = formatEnergy(valO)
+	l = string.len(valO)
+	monitor.blit(valO, string.rep(c, l), string.rep("f", l))
 	clearEOL()
 end
 
@@ -170,6 +209,7 @@ local function renderMonitor()
 		printCoolant()
 		printWaste()
 		printEnergy()
+		printTransfer()
 		printTimeStamp()
 		os.sleep(0.5)
 	end
