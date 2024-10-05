@@ -35,8 +35,6 @@ strs = { strReactorStatus, strTemperature, strDamage, strFuel, strCoolant, strWa
 
 userEnabled = false
 energySatisfied = false
--- Used to display target/threshold energy
-energyNote = 0
 
 -- Urgent status information
 info = " "
@@ -236,11 +234,9 @@ local function controlReactor()
 		elseif getEnergyPercent() >= ENERGY_MAX then
 			stopReactor()
 			energySatisfied = true
-			energyNote = ENERGY_THRESHOLD
 			info = "--- ENERGY FULL ---"
 		elseif energySatisfied and getEnergyPercent() > ENERGY_THRESHOLD then
 			stopReactor()
-			energyNote = ENERGY_THRESHOLD
 			info = "--- ENERGY FULL ---"
 		else
 			if userEnabled then
@@ -253,7 +249,6 @@ local function controlReactor()
 				end
 			end
 			energySatisfied = false
-			energyNote = ENERGY_MAX
 			info = " "
 		end
 
