@@ -1,7 +1,17 @@
---local monitor = peripheral.wrap("monitor_2")
+-- Config section ---
+
+-- Overwrite the peripheral names if necessary
 local monitor = peripheral.wrap("left")
 local reactor = peripheral.wrap("fissionReactorLogicAdapter_2")
 local storage = peripheral.wrap("inductionPort_2")
+
+local ENERGY_MAX = 95
+local ENERGY_THRESHOLD = 90
+local DAMAGE_MAX = 1
+-- 1200 is the maximum safe temperature
+local TEMPERATURE_MAX = 1000
+
+--- Config end ---
 
 local strReactorStatus = "Status:    "
 local lenReactorStatus = string.len(strReactorStatus)
@@ -18,13 +28,13 @@ local lenWaste         = string.len(strWaste)
 local strEnergy        = "Energy:    "
 local lenEnergy        = string.len(strEnergy)
 
-local ENERGY_THRESHOLD = 95
-local DAMAGE_THRESHOLD = 1
-
 -- Used to construct the static status keys
 strs = { strReactorStatus, strTemperature, strDamage, strFuel, strCoolant, strWaste, strEnergy }
 
 userEnabled = false
+energySatisfied = false
+-- Used to display target/threshold energy
+energyNote = 0
 
 -- Urgent status information
 info = " "
@@ -37,6 +47,12 @@ local function toggleReactor()
 		else
 			reactor.activate()
 		end
+	end
+end
+
+local function stopReactor()
+	if reactor.getStatus() then
+		reactor.scram()
 	end
 end
 
@@ -74,9 +90,8 @@ end
 local function printTemperature()
 	monitor.setCursorPos(lenTemperature + 1, 3)
 	local t = reactor.getTemperature()
-	-- 1200 is the max safe temp
-	local tStr = string.format("%.1f/%d", t, 1200)
-	local c = t >= 1200 and "e" or "0"
+	local tStr = string.format("%.1f/%d", t, TEMPERATURE_MAX)
+	local c = t >= TEMPERATURE_MAX and "e" or "0"
 	monitor.blit(tStr, string.rep(c, string.len(tStr)), string.rep("f", string.len(tStr)))
 	clearEOL()
 end
@@ -84,7 +99,7 @@ end
 local function printDamage()
 	monitor.setCursorPos(lenDamage + 1, 4)
 	local d = reactor.getDamagePercent()
-	local c = d >= DAMAGE_THRESHOLD and "e" or "0"
+	local c = d >= DAMAGE_MAX and "e" or "0"
 	dStr = string.format("%d%%", d)
 	monitor.blit(dStr, string.rep(c, string.len(dStr)), string.rep("f", string.len(dStr)))
 	clearEOL()
@@ -128,8 +143,8 @@ end
 local function printEnergy()
 	monitor.setCursorPos(lenEnergy + 1, 8)
 	local w = getEnergyPercent()
-	local c = w > ENERGY_THRESHOLD and "e" or "0"
-	wStr = string.format("%.1f%%", w)
+	local c = w > ENERGY_MAX and "e" or "0"
+	wStr = string.format("%.1f%% (%d%%)", w, energyNote)
 	monitor.blit(wStr, string.rep(c, string.len(wStr)), string.rep("f", string.len(wStr)))
 	clearEOL()
 end
@@ -162,33 +177,31 @@ end
 
 local function controlReactor()
 	while true do
-		if (reactor.getTemperature() >= 1200 or getCoolantPercent() <= 20) then
-			-- Toggle alarm
+		-- Toggle alarm
+		if (reactor.getTemperature() >= TEMPERATURE_MAX or getCoolantPercent() <= 20) then
 			redstone.setOutput("top", true)
 		else
 			redstone.setOutput("top", false)
 		end
 
-		if reactor.getTemperature() >= 1200 then
-			if reactor.getStatus() then
-				reactor.scram()
-			end
+		if reactor.getTemperature() >= TEMPERATURE_MAX then
+			stopReactor()
 			info = "--- TEMPERATURE CRITICAL ---"
-		elseif reactor.getDamagePercent() > DAMAGE_THRESHOLD then
-			if reactor.getStatus() then
-				reactor.scram()
-			end
+		elseif reactor.getDamagePercent() > DAMAGE_MAX then
+			stopReactor()
 			info = "--- DAMAGE CRITICAL ---"
-		elseif getEnergyPercent() >= 95 then
-			if reactor.getStatus() then
-				reactor.scram()
-			end
-			info = "--- ENERGY FULL ---"
 		elseif getCoolantPercent() <= 20 then
-			if reactor.getStatus() then
-				reactor.scram()
-			end
+			stopReactor()
 			info = "--- COOLANT LOW ---"
+		elseif getEnergyPercent() >= ENERGY_MAX then
+			stopReactor()
+			energySatisfied = true
+			energyNote = ENERGY_THRESHOLD
+			info = "--- ENERGY FULL ---"
+		elseif energySatisfied and getEnergyPercent() > ENERGY_THRESHOLD then
+			stopReactor()
+			energyNote = ENERGY_THRESHOLD
+			info = "--- ENERGY FULL ---"
 		else
 			if userEnabled then
 				if not reactor.getStatus() then
@@ -199,6 +212,8 @@ local function controlReactor()
 					reactor.scram()
 				end
 			end
+			energySatisfied = false
+			energyNote = ENERGY_MAX
 			info = " "
 		end
 
